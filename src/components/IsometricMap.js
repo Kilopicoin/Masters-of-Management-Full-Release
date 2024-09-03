@@ -1,8 +1,13 @@
-// src/components/IsometricMap.js
-
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import isometricImage from './31817.png';
 import townImage from './townx.png';
+import Web3 from 'web3';
+import contractABI from './contractABI.json'; // Import the ABI JSON file
+
+const contractAddress = "0x55d78cEe175B17e70d29bdaeD3176c1E24c2576d";
+const ChainRPC = "https://api.s0.b.hmny.io";
+const web3 = new Web3(ChainRPC);
+const contract = new web3.eth.Contract(contractABI.abi, contractAddress);
 
 const IsometricMap = () => {
   const canvasRef = useRef(null);
@@ -10,15 +15,15 @@ const IsometricMap = () => {
 
   const [mapSize] = useState(5000);
   const [offset, setOffset] = useState({
-    x: - mapSize * 50,
-    y: - mapSize * 25,
+    x: -mapSize * 50,
+    y: -mapSize * 25,
   });
 
   const [isDragging, setIsDragging] = useState(false);
   const [startPos, setStartPos] = useState({ x: 0, y: 0 });
   const [isometricImgLoaded, setIsometricImgLoaded] = useState(false);
   const [zoom, setZoom] = useState(1);
-  
+
   const [navCanvasWidth] = useState(360);
   const [navCanvasHeight] = useState(180);
   const [scaleFactorValue] = useState(100);
@@ -31,11 +36,13 @@ const IsometricMap = () => {
   });
 
   const [tileCoordinates, setTileCoordinates] = useState({ row: null, col: null });
-  
+  const [tileOccupancy, setTileOccupancy] = useState(null); // State to store the occupancy status
+  const [showWarningBox, setShowWarningBox] = useState(false); // State to show/hide the warning box
+  const [selectedTile, setSelectedTile] = useState(null); // Store the selected tile coordinates
 
   const isometricImgRef = useRef(new Image());
   const townImgRef = useRef(new Image());
-  
+
   const [currentFrame, setCurrentFrame] = useState(0);
   const totalFrames = 1; // Replace with the total number of frames in your sprite sheet
 
@@ -63,6 +70,50 @@ const IsometricMap = () => {
     };
   }, []);
 
+  const fetchTileOccupancy = useCallback(async (col, row) => {
+    try {
+      const occupied = await contract.methods.getTileOccupied(col, row).call();
+      return occupied;
+    } catch (error) {
+      console.error("Error fetching tile occupancy:", error);
+      return null;
+    }
+  }, []);
+
+  const handleOccupyTile = async () => {
+    if (!selectedTile) return;
+  
+    try {
+      // Get the list of accounts connected to the wallet
+      const accounts = await web3.eth.getAccounts();
+      
+      // Ensure there is an account available
+      if (accounts.length === 0) {
+        alert("No accounts found. Please connect your wallet.");
+        return;
+      }
+  
+      // Get the first account
+      const account = accounts[0];
+  
+      // Send the transaction with the specified `from` address
+      await contract.methods.occupyTile(selectedTile.col, selectedTile.row).send({ from: account });
+  
+      // Update the tile occupancy status
+      setTileOccupancy(true);
+      setShowWarningBox(false); // Close the warning box
+      alert("Tile occupied successfully!");
+    } catch (error) {
+      console.error("Error occupying tile:", error);
+      alert("Failed to occupy tile. Please try again.");
+    }
+  };
+  
+
+  const handleCancelOccupy = () => {
+    setShowWarningBox(false);
+  };
+
   useEffect(() => {
     if (!isometricImgLoaded) {
       return;
@@ -75,7 +126,6 @@ const IsometricMap = () => {
     canvas.height = window.innerHeight;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-
 
     const tileSize = 50 * zoom;
     const numRows = mapSize;
@@ -170,7 +220,7 @@ const IsometricMap = () => {
     navCtx.lineWidth = 2;
     navCtx.strokeRect(0, 0, navCanvas.width, navCanvas.height);
 
-     // Set the background color
+    // Set the background color
     navCtx.fillStyle = 'green';
     navCtx.fillRect(0, 0, navCanvas.width, navCanvas.height);
 
@@ -179,21 +229,24 @@ const IsometricMap = () => {
     const markerY = -(offset.y / zoom) * scaleFactor;
 
     navCtx.fillStyle = 'red';
-    navCtx.fillRect(markerX-5, markerY-5, markerSize, markerSize);
+    navCtx.fillRect(markerX - 5, markerY - 5, markerSize, markerSize);
   }, [offset, mapSize, navCanvasWidth, navCanvasHeight, scaleFactorValue, zoom]);
 
-  const clampOffset = useCallback((newOffsetX, newOffsetY) => {
-    const tileSize = 50 * zoom;
-    const maxOffsetX = -(mapSize - 100) * tileSize * 2;
-    const minOffsetX = -(tileSize * 100);
-    const maxOffsetY = -(mapSize - 100) * tileSize;
-    const minOffsetY = -(tileSize * 100);
+  const clampOffset = useCallback(
+    (newOffsetX, newOffsetY) => {
+      const tileSize = 50 * zoom;
+      const maxOffsetX = -(mapSize - 100) * tileSize * 2;
+      const minOffsetX = -(tileSize * 100);
+      const maxOffsetY = -(mapSize - 100) * tileSize;
+      const minOffsetY = -(tileSize * 100);
 
-    return {
-      x: Math.max(maxOffsetX, Math.min(minOffsetX, newOffsetX)),
-      y: Math.max(maxOffsetY, Math.min(minOffsetY, newOffsetY)),
-    };
-  }, [zoom, mapSize]);
+      return {
+        x: Math.max(maxOffsetX, Math.min(minOffsetX, newOffsetX)),
+        y: Math.max(maxOffsetY, Math.min(minOffsetY, newOffsetY)),
+      };
+    },
+    [zoom, mapSize]
+  );
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -209,7 +262,7 @@ const IsometricMap = () => {
       setIsDragging(true);
       setStartPos({ x: e.clientX, y: e.clientY });
     };
-    
+
     const handleMouseMove = (e) => {
       if (!isDragging) return;
 
@@ -244,8 +297,8 @@ const IsometricMap = () => {
       const cursorX = e.clientX - canvasRef.current.getBoundingClientRect().left;
       const cursorY = e.clientY - canvasRef.current.getBoundingClientRect().top;
 
-      const offsetX = (offset.x - cursorX) / zoom * clampedZoom + cursorX;
-      const offsetY = (offset.y - cursorY) / zoom * clampedZoom + cursorY;
+      const offsetX = ((offset.x - cursorX) / zoom) * clampedZoom + cursorX;
+      const offsetY = ((offset.y - cursorY) / zoom) * clampedZoom + cursorY;
 
       const clampedOffset = clampOffset(offsetX, offsetY);
 
@@ -253,7 +306,7 @@ const IsometricMap = () => {
       setOffset(clampedOffset);
     };
 
-    const handleCanvasClick = (e) => {
+    const handleCanvasClick = async (e) => {
       const rect = canvas.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
@@ -264,6 +317,18 @@ const IsometricMap = () => {
       const row = Math.floor((mouseY - offset.y - (col % 2 === 1 ? tileSize / 2 : 0)) / tileSize);
 
       setTileCoordinates({ row, col });
+
+      // Fetch occupancy status and update state
+      const occupancy = await fetchTileOccupancy(row, col);
+      setTileOccupancy(occupancy);
+
+      if (occupancy === false) {
+        // If the tile is unoccupied, show the warning box
+        setSelectedTile({ row, col });
+        setShowWarningBox(true);
+      } else {
+        setShowWarningBox(false); // Hide the warning box if the tile is occupied
+      }
     };
 
     window.addEventListener('resize', handleResize);
@@ -281,23 +346,23 @@ const IsometricMap = () => {
       canvas.removeEventListener('wheel', handleWheel);
       canvas.removeEventListener('click', handleCanvasClick);
     };
-  }, [isDragging, startPos, offset, zoom, clampOffset]);
+  }, [isDragging, startPos, offset, zoom, clampOffset, fetchTileOccupancy]);
 
   useEffect(() => {
     const navCanvas = navCanvasRef.current;
-  
+
     const handleNavClick = (e) => {
       const rect = navCanvas.getBoundingClientRect();
       const scaleFactor = navCanvasWidth / (mapSize * scaleFactorValue);
-  
+
       const clickedX = (e.clientX - rect.left) / scaleFactor;
       const clickedY = (e.clientY - rect.top) / scaleFactor;
-  
+
       const newOffsetX = -clickedX;
       const newOffsetY = -clickedY;
 
       const clampedOffset = clampOffset(newOffsetX * zoom, newOffsetY * zoom);
-  
+
       setOffset(clampedOffset);
     };
 
@@ -347,7 +412,7 @@ const IsometricMap = () => {
     navCanvas.addEventListener('mousemove', handleNavMouseMove);
     navCanvas.addEventListener('mouseup', handleNavMouseUp);
     navCanvas.addEventListener('click', handleNavClick);
-  
+
     return () => {
       navCanvas.removeEventListener('mousedown', handleNavMouseDown);
       navCanvas.removeEventListener('mousemove', handleNavMouseMove);
@@ -365,9 +430,21 @@ const IsometricMap = () => {
         height={navCanvasHeight}
         style={{ position: 'absolute', bottom: '10px', left: '10px', border: '1px solid black' }}
       />
-      <div style={{ position: 'absolute', top: '10px', left: '10px', color: 'white', backgroundColor: 'rgba(0, 0, 0, 0.5)', padding: '5px', borderRadius: '5px' }}>
+      <div style={{ position: 'absolute', top: '10px', left: '10px', color: 'white', backgroundColor: 'rgba(0, 0, 0, 0.5)', padding: '10px', borderRadius: '5px' }}>
         {tileCoordinates.row !== null && tileCoordinates.col !== null && (
-          <div>Tile Coordinates: Row {tileCoordinates.row}, Col {tileCoordinates.col}</div>
+          <>
+            <div>Tile Coordinates: Row {tileCoordinates.row}, Col {tileCoordinates.col}</div>
+            {tileOccupancy !== null && (
+              <div>Tile Status: {tileOccupancy ? "Occupied" : "Unoccupied"}</div>
+            )}
+            {showWarningBox && (
+              <>
+                <p>Do you want to occupy this tile?</p>
+                <button onClick={handleOccupyTile}>Occupy</button>
+                <button onClick={handleCancelOccupy} style={{ marginLeft: '10px' }}>Cancel</button>
+              </>
+            )}
+          </>
         )}
       </div>
     </>
