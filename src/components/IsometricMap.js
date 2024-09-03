@@ -3,6 +3,7 @@ import isometricImage from './31817.png';
 import townImage from './townx.png';
 import Web3 from 'web3';
 import contractABI from './contractABI.json'; // Import the ABI JSON file
+import { ethers } from 'ethers';
 
 const contractAddress = "0x55d78cEe175B17e70d29bdaeD3176c1E24c2576d";
 const ChainRPC = "https://api.s0.b.hmny.io";
@@ -18,6 +19,7 @@ const IsometricMap = () => {
     x: -mapSize * 50,
     y: -mapSize * 25,
   });
+
 
   const [isDragging, setIsDragging] = useState(false);
   const [startPos, setStartPos] = useState({ x: 0, y: 0 });
@@ -84,20 +86,18 @@ const IsometricMap = () => {
     if (!selectedTile) return;
   
     try {
-      // Get the list of accounts connected to the wallet
-      const accounts = await web3.eth.getAccounts();
-      
-      // Ensure there is an account available
-      if (accounts.length === 0) {
-        alert("No accounts found. Please connect your wallet.");
-        return;
-      }
-  
-      // Get the first account
-      const account = accounts[0];
-  
-      // Send the transaction with the specified `from` address
-      await contract.methods.occupyTile(selectedTile.col, selectedTile.row).send({ from: account });
+      // Use the updated web3 instance that checks for MetaMask
+
+      await window.ethereum.request({ method: 'eth_requestAccounts' });
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const contract = new ethers.Contract(contractAddress, contractABI.abi, signer);
+
+
+      const transaction = await contract.occupyTile(selectedTile.col, selectedTile.row);
+      await transaction.wait(); // Wait for the transaction to be confirmed on the blockchain
+
+
   
       // Update the tile occupancy status
       setTileOccupancy(true);
@@ -108,6 +108,7 @@ const IsometricMap = () => {
       alert("Failed to occupy tile. Please try again.");
     }
   };
+  
   
 
   const handleCancelOccupy = () => {
