@@ -5,7 +5,7 @@ import Web3 from 'web3';
 import contractABI from './contractABI.json'; // Import the ABI JSON file
 import { ethers } from 'ethers';
 
-const contractAddress = "0x55d78cEe175B17e70d29bdaeD3176c1E24c2576d";
+const contractAddress = "0xcbA4a6E0A76B2525e83ee4951E5Bc69AE44dBf50";
 const ChainRPC = "https://api.s0.b.hmny.io";
 const web3 = new Web3(ChainRPC);
 const contract = new web3.eth.Contract(contractABI.abi, contractAddress);
@@ -86,18 +86,17 @@ const IsometricMap = () => {
     if (!selectedTile) return;
   
     try {
-      // Use the updated web3 instance that checks for MetaMask
-
-      await window.ethereum.request({ method: 'eth_requestAccounts' });
+      // Request accounts and set the user account
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
       const contract = new ethers.Contract(contractAddress, contractABI.abi, signer);
-
-
-      const transaction = await contract.occupyTile(selectedTile.col, selectedTile.row);
-      await transaction.wait(); // Wait for the transaction to be confirmed on the blockchain
-
-
+  
+      // Send the transaction (do not include the 'from' field)
+      console.log(selectedTile.col, selectedTile.row);
+      const transaction = await contract.occupyTile(selectedTile.row, selectedTile.col);
+  
+      // Wait for the transaction to be confirmed
+      await transaction.wait();
   
       // Update the tile occupancy status
       setTileOccupancy(true);
@@ -108,6 +107,7 @@ const IsometricMap = () => {
       alert("Failed to occupy tile. Please try again.");
     }
   };
+  
   
   
 

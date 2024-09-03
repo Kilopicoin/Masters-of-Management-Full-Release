@@ -6,7 +6,7 @@
     "@testing-library/jest-dom": "^5.17.0",
     "@testing-library/react": "^13.4.0",
     "@testing-library/user-event": "^13.5.0",
-    "ethers": "^6.13.1",
+    "ethers": "^6.13.2",
     "gif.js": "^0.2.0",
     "gifuct-js": "^2.1.2",
     "konva": "^9.2.3",
