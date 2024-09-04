@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import isometricImage from './31817.png';
+import isometricImageOccupied from './31817.png';
 import townImage from './townx.png';
 import Web3 from 'web3';
 import contractABI from './contractABI.json'; // Import the ABI JSON file
