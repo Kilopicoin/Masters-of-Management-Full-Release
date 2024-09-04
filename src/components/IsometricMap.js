@@ -1,12 +1,12 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import isometricImage from './31817.png';
-import isometricImageOccupied from './31817.png';
+import isometricImageOccupied from './55555.png';
 import townImage from './townx.png';
 import Web3 from 'web3';
 import contractABI from './contractABI.json'; // Import the ABI JSON file
 import { ethers } from 'ethers';
 
-const contractAddress = "0xcbA4a6E0A76B2525e83ee4951E5Bc69AE44dBf50";
+const contractAddress = "0x8343397728EC68AcF57713690DddE9Da61C72abE";
 const ChainRPC = "https://api.s0.b.hmny.io";
 const web3 = new Web3(ChainRPC);
 const contract = new web3.eth.Contract(contractABI.abi, contractAddress);
@@ -26,6 +26,8 @@ const IsometricMap = () => {
   const [startPos, setStartPos] = useState({ x: 0, y: 0 });
   const [isometricImgLoaded, setIsometricImgLoaded] = useState(false);
   const [zoom, setZoom] = useState(1);
+  const [occupiedTiles, setOccupiedTiles] = useState([]);
+
 
   const [navCanvasWidth] = useState(360);
   const [navCanvasHeight] = useState(180);
@@ -44,6 +46,8 @@ const IsometricMap = () => {
   const [selectedTile, setSelectedTile] = useState(null); // Store the selected tile coordinates
 
   const isometricImgRef = useRef(new Image());
+  const isometricImgOccupiedRef = useRef(new Image());
+  
   const townImgRef = useRef(new Image());
 
   const [currentFrame, setCurrentFrame] = useState(0);
@@ -63,6 +67,7 @@ const IsometricMap = () => {
 
   useEffect(() => {
     isometricImgRef.current.src = isometricImage;
+    isometricImgOccupiedRef.current.src = isometricImageOccupied;
     isometricImgRef.current.onload = () => {
       setIsometricImgLoaded(true);
     };
@@ -72,6 +77,51 @@ const IsometricMap = () => {
       setTownImgLoaded(true);
     };
   }, []);
+
+  const fetchAllOccupiedTiles = useCallback(async () => {
+    try {
+      const occupiedTiles = await contract.methods.getAllOccupiedTiles().call();
+      return occupiedTiles; // This will return an array of occupied tiles with their x, y coordinates
+    } catch (error) {
+      console.error("Error fetching all occupied tiles:", error);
+      return [];
+    }
+  }, []);
+
+  useEffect(() => {
+    const fetchOccupiedTiles = async () => {
+      const tiles = await fetchAllOccupiedTiles();
+
+      let occupiedOnes = [];
+      const tilesLength = tiles.length;
+
+
+      for(let z=0; z<tilesLength; z++){
+
+
+      occupiedOnes.push({
+
+        x: parseInt(tiles[z].x),
+        y: parseInt(tiles[z].y)
+
+
+      });
+
+    }
+
+
+      setOccupiedTiles(occupiedOnes);
+      console.log(occupiedOnes)
+    };
+  
+    fetchOccupiedTiles();
+  }, [fetchAllOccupiedTiles]);
+
+  
+  const isTileOccupied = useCallback((row, col) => {
+    return occupiedTiles.some(tile => tile.x === row && tile.y === col);
+  }, [occupiedTiles]);
+  
 
   const fetchTileOccupancy = useCallback(async (col, row) => {
     try {
@@ -83,6 +133,12 @@ const IsometricMap = () => {
     }
   }, []);
 
+  
+  
+
+
+
+
   const handleOccupyTile = async () => {
     if (!selectedTile) return;
   
@@ -93,7 +149,6 @@ const IsometricMap = () => {
       const contract = new ethers.Contract(contractAddress, contractABI.abi, signer);
   
       // Send the transaction (do not include the 'from' field)
-      console.log(selectedTile.col, selectedTile.row);
       const transaction = await contract.occupyTile(selectedTile.row, selectedTile.col);
   
       // Wait for the transaction to be confirmed
@@ -120,6 +175,7 @@ const IsometricMap = () => {
     if (!isometricImgLoaded) {
       return;
     }
+    
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
@@ -164,25 +220,47 @@ const IsometricMap = () => {
     // Sort tiles based on y-coordinate
     tilesToDraw.sort((a, b) => a.y - b.y);
 
+
+
+    
+
+
     // Draw sorted tiles
     for (const tile of tilesToDraw) {
       const x = tile.x;
-      const y = tile.y;
-      const row = tile.row;
-      const col = tile.col;
+  const y = tile.y;
+  const row = tile.row;
+  const col = tile.col;
 
-      // Your existing drawing code here
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.lineTo(x + tileSize * 1, y - tileSize / 2);
-      ctx.lineTo(x + tileSize * 2, y);
-      ctx.lineTo(x + tileSize * 1, y + tileSize / 2);
-      ctx.closePath();
-      ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x + tileSize * 1, y - tileSize / 2);
+  ctx.lineTo(x + tileSize * 2, y);
+  ctx.lineTo(x + tileSize * 1, y + tileSize / 2);
+  ctx.closePath();
+  ctx.stroke();
+
+   ctx.drawImage(isometricImgRef.current, x, y - tileSize * 1.5, tileSize * 2, tileSize * 2);
+  
+  occupiedTiles.forEach(tile => {
+    const a = parseInt(tile.x);
+    const b = parseInt(tile.y);
+
+    if ((row === a && col === b)) {
+    // Draw the occupied tile image
+    ctx.drawImage(isometricImgOccupiedRef.current, x, y - tileSize * 1.5, tileSize * 2, tileSize * 2);
+
+
+    }
+
+  });
+
+
+
 
       // Check if the town image is loaded before attempting to draw it
       if (townImgLoaded) {
-        if ((row === 20 && col === 20)) {
+        if ((row === 105 && col === 105)) {
           const spriteWidth = townImgRef.current.width / totalFrames;
           const spriteHeight = townImgRef.current.height;
 
@@ -200,12 +278,12 @@ const IsometricMap = () => {
             tileSize * 2,
             tileSize * 2
           );
-        } else {
-          ctx.drawImage(isometricImgRef.current, x, y - tileSize * 1.5, tileSize * 2, tileSize * 2);
         }
+          
+        
       }
     }
-  }, [offset, isometricImgLoaded, zoom, mapSize, townImgLoaded, currentFrame]);
+  }, [offset, isometricImgLoaded, zoom, mapSize, townImgLoaded, currentFrame, isTileOccupied, occupiedTiles]);
 
   useEffect(() => {
     const navCanvas = navCanvasRef.current;
