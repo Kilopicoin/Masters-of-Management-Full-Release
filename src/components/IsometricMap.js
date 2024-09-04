@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import isometricImage from './31817.png';
-import isometricImageOccupied from './55555.png';
+import isometricImageOccupied from './whiteFlag.png';
 import townImage from './townx.png';
 import Web3 from 'web3';
 import contractABI from './contractABI.json'; // Import the ABI JSON file
@@ -232,6 +232,7 @@ const IsometricMap = () => {
   const row = tile.row;
   const col = tile.col;
 
+  
   ctx.beginPath();
   ctx.moveTo(x, y);
   ctx.lineTo(x + tileSize * 1, y - tileSize / 2);
@@ -239,6 +240,7 @@ const IsometricMap = () => {
   ctx.lineTo(x + tileSize * 1, y + tileSize / 2);
   ctx.closePath();
   ctx.stroke();
+  
 
    ctx.drawImage(isometricImgRef.current, x, y - tileSize * 1.5, tileSize * 2, tileSize * 2);
   
