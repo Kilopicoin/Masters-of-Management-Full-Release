@@ -234,7 +234,7 @@ const IsometricMap = () => {
 
   
   ctx.beginPath();
-  ctx.moveTo(x , y);
+  ctx.moveTo(x, y);
   ctx.lineTo(x + tileSize * 1, y - tileSize / 2);
   ctx.lineTo(x + tileSize * 2, y);
   ctx.lineTo(x + tileSize * 1, y + tileSize / 2);
@@ -242,7 +242,7 @@ const IsometricMap = () => {
   ctx.stroke();
   
 
-    ctx.drawImage(isometricImgRef.current, x, y - tileSize * 1.5, tileSize * 2, tileSize * 2);
+   ctx.drawImage(isometricImgRef.current, x, y - tileSize * 1.5, tileSize * 2, tileSize * 2);
   
   occupiedTiles.forEach(tile => {
     const a = parseInt(tile.x);
@@ -392,37 +392,26 @@ const IsometricMap = () => {
       const rect = canvas.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
-    
+
+      // Calculate tile coordinates
       const tileSize = 50 * zoom;
-    
-      // Calculate the position relative to the center of the map
-      const isoX = (mouseX - offset.x) - tileSize;
-      const isoY = (mouseY - offset.y) - tileSize / 2;
-    
-      // Convert screen coordinates to isometric grid coordinates
-      const row = Math.floor((isoY / tileSize) + (isoX / (tileSize * 2)));
-      const col = Math.floor((isoY / tileSize) - (isoX / (tileSize * 2))) + mapSize;
-    
-      // Make sure row and col are positive (since you want them to start at 1)
-      const correctedRow = row + 1;
-      const correctedCol = col + 1;
-    
-      setTileCoordinates({ row: correctedRow, col: correctedCol });
-    
+      const col = Math.floor((mouseX - offset.x) / (tileSize * 1));
+      const row = Math.floor((mouseY - offset.y - (col % 2 === 1 ? tileSize / 2 : 0)) / tileSize);
+
+      setTileCoordinates({ row, col });
+
       // Fetch occupancy status and update state
-      const occupancy = await fetchTileOccupancy(correctedRow, correctedCol);
+      const occupancy = await fetchTileOccupancy(row, col);
       setTileOccupancy(occupancy);
-    
+
       if (occupancy === false) {
         // If the tile is unoccupied, show the warning box
-        setSelectedTile({ row: correctedRow, col: correctedCol });
+        setSelectedTile({ row, col });
         setShowWarningBox(true);
       } else {
         setShowWarningBox(false); // Hide the warning box if the tile is occupied
       }
     };
-    
-    
 
     window.addEventListener('resize', handleResize);
     canvas.addEventListener('mousedown', handleMouseDown);
@@ -439,7 +428,7 @@ const IsometricMap = () => {
       canvas.removeEventListener('wheel', handleWheel);
       canvas.removeEventListener('click', handleCanvasClick);
     };
-  }, [isDragging, startPos, offset, zoom, clampOffset, fetchTileOccupancy, mapSize]);
+  }, [isDragging, startPos, offset, zoom, clampOffset, fetchTileOccupancy]);
 
   useEffect(() => {
     const navCanvas = navCanvasRef.current;
