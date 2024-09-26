@@ -1,557 +1,221 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
-import isometricImage from './31817.png';
-import isometricImageOccupied from './whiteFlag.png';
-import townImage from './townx.png';
-import Web3 from 'web3';
-import contractABI from './contractABI.json'; // Import the ABI JSON file
-import { ethers } from 'ethers';
+import React, { useEffect, useState } from 'react';
+import Konva from 'konva';
+import grassImageSrc from './grass.png';
+import whiteFlagImageSrc from './whiteFlag.png';
+import nowaysrc from './55555.png';
 
-const contractAddress = "0x861c1C42443D4198B4FE185195eA558Bb015317D";
-const ChainRPC = "https://api.s0.b.hmny.io";
-const web3 = new Web3(ChainRPC);
-const contract = new web3.eth.Contract(contractABI.abi, contractAddress);
 
 const IsometricMap = () => {
-  const canvasRef = useRef(null);
-  const navCanvasRef = useRef(null);
-
-  const [mapSize] = useState(5000);
-  const [offset, setOffset] = useState({
-    x: -mapSize * 50,
-    y: -mapSize * 25,
-  });
-
-
-  const [isDragging, setIsDragging] = useState(false);
-  const [startPos, setStartPos] = useState({ x: 0, y: 0 });
-  const [isometricImgLoaded, setIsometricImgLoaded] = useState(false);
-  const [zoom, setZoom] = useState(1);
-  const [occupiedTiles, setOccupiedTiles] = useState([]);
-
-
-  const [navCanvasWidth] = useState(360);
-  const [navCanvasHeight] = useState(180);
-  const [scaleFactorValue] = useState(100);
-
-  const [townImgLoaded, setTownImgLoaded] = useState(false);
-
-  const [markerPosition, setMarkerPosition] = useState({
-    x: 0,
-    y: 0,
-  });
-
-  const [tileCoordinates, setTileCoordinates] = useState({ row: null, col: null });
-  const [tileOccupancy, setTileOccupancy] = useState(null); // State to store the occupancy status
-  const [showWarningBox, setShowWarningBox] = useState(false); // State to show/hide the warning box
-  const [selectedTile, setSelectedTile] = useState(null); // Store the selected tile coordinates
-
-  const isometricImgRef = useRef(new Image());
-  const isometricImgOccupiedRef = useRef(new Image());
-  
-  const townImgRef = useRef(new Image());
-
-  const [currentFrame, setCurrentFrame] = useState(0);
-  const totalFrames = 1; // Replace with the total number of frames in your sprite sheet
-
-  const updateFrame = () => {
-    setCurrentFrame((prevFrame) => (prevFrame + 1) % totalFrames);
-  };
+  const [tileInfo, setTileInfo] = useState(null); // State to hold the clicked tile information
 
   useEffect(() => {
-    const animationInterval = setInterval(updateFrame, 500); // Adjust the interval based on your sprite sheet frame rate
+    // Tile dimensions
+    const tileWidth = 386;
+    const tileHeight = tileWidth / 2;
 
-    return () => {
-      clearInterval(animationInterval);
-    };
-  }, []);
+    // Initialize Konva stage and layer
+    const stage = new Konva.Stage({
+      container: 'container',
+      width: window.innerWidth,
+      height: window.innerHeight,
+      draggable: false, // Disable stage dragging by default
+    });
 
-  useEffect(() => {
-    isometricImgRef.current.src = isometricImage;
-    isometricImgOccupiedRef.current.src = isometricImageOccupied;
-    isometricImgRef.current.onload = () => {
-      setIsometricImgLoaded(true);
-    };
+    // Set an initial zoom level
+    const initialZoomLevel = 0.3; // Example initial zoom level
+    stage.scale({ x: initialZoomLevel, y: initialZoomLevel });
 
-    townImgRef.current.src = townImage;
-    townImgRef.current.onload = () => {
-      setTownImgLoaded(true);
-    };
-  }, []);
+    // Zoom limits
+    const minZoom = 0.2;  // Minimum zoom level
+    const maxZoom = 1;    // Maximum zoom level
 
-  const fetchAllOccupiedTiles = useCallback(async () => {
-    try {
-      const occupiedTiles = await contract.methods.getAllOccupiedTiles().call();
-      return occupiedTiles; // This will return an array of occupied tiles with their x, y coordinates
-    } catch (error) {
-      console.error("Error fetching all occupied tiles:", error);
-      return [];
-    }
-  }, []);
+    const layer = new Konva.Layer();
+    const flagLayer = new Konva.Layer(); // Create a separate layer for the flag
+    stage.add(layer);
+    stage.add(flagLayer); // Add flag layer to the stage
 
-  useEffect(() => {
-    const fetchOccupiedTiles = async () => {
-      const tiles = await fetchAllOccupiedTiles();
+    // Track whether we are currently dragging
+    let isDragging = false;
+    let lastPos = { x: 0, y: 0 };
 
-      let occupiedOnes = [];
-      const tilesLength = tiles.length;
-
-
-      for(let z=0; z<tilesLength; z++){
-
-
-      occupiedOnes.push({
-
-        x: parseInt(tiles[z].x),
-        y: parseInt(tiles[z].y)
-
-
-      });
-
-    }
-
-
-      setOccupiedTiles(occupiedOnes);
-
-    };
-  
-    fetchOccupiedTiles();
-  }, [fetchAllOccupiedTiles]);
-
-  
-  const isTileOccupied = useCallback((row, col) => {
-    return occupiedTiles.some(tile => tile.x === row && tile.y === col);
-  }, [occupiedTiles]);
-  
-
-  const fetchTileOccupancy = useCallback(async (col, row) => {
-    try {
-      const occupied = await contract.methods.getTileOccupied(col, row).call();
-      return occupied;
-    } catch (error) {
-      console.error("Error fetching tile occupancy:", error);
-      return null;
-    }
-  }, []);
-
-  
-  
-
-
-
-
-  const handleOccupyTile = async () => {
-    if (!selectedTile) return;
-  
-    try {
-      // Request accounts and set the user account
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
-      const contract = new ethers.Contract(contractAddress, contractABI.abi, signer);
-  
-      // Send the transaction (do not include the 'from' field)
-
-      const transaction = await contract.occupyTile(selectedTile.row, selectedTile.col);
-  
-      // Wait for the transaction to be confirmed
-      await transaction.wait();
-  
-      // Update the tile occupancy status
-      setTileOccupancy(true);
-      setShowWarningBox(false); // Close the warning box
-      alert("Tile occupied successfully!");
-    } catch (error) {
-      console.error("Error occupying tile:", error);
-      alert("Failed to occupy tile. Please try again.");
-    }
-  };
-  
-  
-  const screenToIsometric = useCallback((x, y, tileSize, offset) => {
-    const isoX = (x - offset.x) - tileSize;
-    const isoY = (y - offset.y) - tileSize / 2;
-  
-    const row = Math.floor((isoY / tileSize) + (isoX / (tileSize * 2)));
-    const col = Math.floor((isoY / tileSize) - (isoX / (tileSize * 2))) + mapSize;
-  
-    return { row: row + 1, col: col }; // Adjusting to 1-based indexing
-  }, [mapSize]);
-  
-  
-
-  const handleCancelOccupy = () => {
-    setShowWarningBox(false);
-  };
-
-  useEffect(() => {
-    if (!isometricImgLoaded) {
-      return;
-    }
-    
-
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    const tileSize = 50 * zoom;
-    const numRows = mapSize * 2 ;
-    const numCols = numRows;
-
-    const visibleRows = {
-      start: Math.floor((-offset.y - tileSize) / tileSize),
-      end: Math.floor((-offset.y + canvas.height + tileSize) / tileSize),
-    };
-
-    console.log(visibleRows.start, visibleRows.end)
-
-    const visibleCols = {
-      start: Math.floor((-offset.x - tileSize * 2) / (tileSize * 1)),
-      end: Math.floor((-offset.x + canvas.width + tileSize * 2) / (tileSize * 1)),
-    };
-
-    console.log(visibleCols.start, visibleCols.end)
-
-    const tilesToDraw = [];
-
-    for (let row = Math.max(0, visibleRows.start); row <= Math.min(numRows, visibleRows.end); row++) {
-      for (let col = Math.max(0, visibleCols.start); col <= Math.min(numCols, visibleCols.end); col++) {
-        const x = col * (tileSize * 1) + offset.x;
-        const y = row * tileSize + (col % 2 === 1 ? tileSize / 2 : 0) + offset.y;
-
-        const tile = {
-          x,
-          y,
-          row,
-          col,
-        };
-
-        tilesToDraw.push(tile);
-      }
-    }
-
-    // Sort tiles based on y-coordinate
-    tilesToDraw.sort((a, b) => a.y - b.y);
-
-
-
-    
-
-
-    // Draw sorted tiles
-    for (const tile of tilesToDraw) {
-      const { x, y, row, col } = tile;
-
-    // Convert to isometric grid coordinates
-    const isoCoords = screenToIsometric(x, y, tileSize, offset);
-
-    ctx.beginPath();
-  ctx.moveTo(x, y);
-  ctx.lineTo(x + tileSize * 1, y - tileSize / 2);
-  ctx.lineTo(x + tileSize * 2, y);
-  ctx.lineTo(x + tileSize * 1, y + tileSize / 2);
-  ctx.closePath();
-  ctx.stroke();
-  
-
-    ctx.drawImage(isometricImgRef.current, x, y - tileSize * 1.5, tileSize * 2, tileSize * 2);
-
-    occupiedTiles.forEach(tile => {
-      const occupiedRow = parseInt(tile.x);
-      const occupiedCol = parseInt(tile.y);
-
-      if (isoCoords.row === occupiedRow && isoCoords.col === occupiedCol) {
-        // Draw the occupied tile image
-        ctx.drawImage(isometricImgOccupiedRef.current, x, y - tileSize * 1.5, tileSize * 2, tileSize * 2);
+    // Mouse down event
+    stage.on('mousedown', (e) => {
+      if (e.evt.button === 0) { // Left mouse button
+        isDragging = true;
+        lastPos = { x: e.evt.clientX, y: e.evt.clientY }; // Store the initial click position
       }
     });
 
+    // Mouse move event
+    stage.on('mousemove', (e) => {
+      if (isDragging) {
+        const dx = e.evt.clientX - lastPos.x;
+        const dy = e.evt.clientY - lastPos.y;
 
+        stage.x(stage.x() + dx); // Adjust the stage x position
+        stage.y(stage.y() + dy); // Adjust the stage y position
 
-
-      // Check if the town image is loaded before attempting to draw it
-      if (townImgLoaded) {
-        if ((row === 105 && col === 105)) {
-          const spriteWidth = townImgRef.current.width / totalFrames;
-          const spriteHeight = townImgRef.current.height;
-
-          const sourceX = currentFrame * spriteWidth;
-          const sourceY = 0;
-
-          ctx.drawImage(
-            townImgRef.current,
-            sourceX,
-            sourceY,
-            spriteWidth,
-            spriteHeight,
-            x,
-            y - tileSize * 1.5,
-            tileSize * 2,
-            tileSize * 2
-          );
-        }
-          
-        
+        lastPos = { x: e.evt.clientX, y: e.evt.clientY }; // Update the last mouse position
+        stage.batchDraw(); // Redraw the stage to apply the new position
       }
-    }
-  }, [offset, isometricImgLoaded, zoom, mapSize, townImgLoaded, currentFrame, isTileOccupied, occupiedTiles, screenToIsometric]);
+    });
 
-  useEffect(() => {
-    const navCanvas = navCanvasRef.current;
-    const navCtx = navCanvas.getContext('2d');
+    // Mouse up event
+    stage.on('mouseup', () => {
+      isDragging = false; // Stop dragging when mouse is released
+    });
 
-    navCanvas.width = navCanvasWidth;
-    navCanvas.height = navCanvasHeight;
+    // Zoom functionality with mouse wheel
+    stage.on('wheel', (e) => {
+      e.evt.preventDefault();
 
-    navCtx.clearRect(0, 0, navCanvas.width, navCanvas.height);
+      const scaleBy = 1.1; // Zoom factor
+      const oldScale = stage.scaleX();
 
-    const scaleFactor = navCanvasWidth / (mapSize * scaleFactorValue);
-
-    navCtx.strokeStyle = 'red';
-    navCtx.lineWidth = 2;
-    navCtx.strokeRect(0, 0, navCanvas.width, navCanvas.height);
-
-    // Set the background color
-    navCtx.fillStyle = 'green';
-    navCtx.fillRect(0, 0, navCanvas.width, navCanvas.height);
-
-    const markerSize = 10;
-    const markerX = -(offset.x / zoom) * scaleFactor;
-    const markerY = -(offset.y / zoom) * scaleFactor;
-
-    navCtx.fillStyle = 'red';
-    navCtx.fillRect(markerX - 5, markerY - 5, markerSize, markerSize);
-  }, [offset, mapSize, navCanvasWidth, navCanvasHeight, scaleFactorValue, zoom]);
-
-  const clampOffset = useCallback(
-    (newOffsetX, newOffsetY) => {
-      const tileSize = 50 * zoom;
-      const maxOffsetX = -(mapSize - 100) * tileSize * 2;
-      const minOffsetX = -(tileSize * 100);
-      const maxOffsetY = -(mapSize - 100) * tileSize;
-      const minOffsetY = -(tileSize * 100);
-
-      return {
-        x: Math.max(maxOffsetX, Math.min(minOffsetX, newOffsetX)),
-        y: Math.max(maxOffsetY, Math.min(minOffsetY, newOffsetY)),
+      // Get mouse pointer position relative to the stage
+      const mousePointTo = {
+        x: stage.getPointerPosition().x / oldScale - stage.x() / oldScale,
+        y: stage.getPointerPosition().y / oldScale - stage.y() / oldScale,
       };
-    },
-    [zoom, mapSize]
-  );
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
+      // Zoom in or out based on wheel direction
+      let newScale = e.evt.deltaY > 0 ? oldScale / scaleBy : oldScale * scaleBy;
 
-    const handleResize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-
-      setOffset((prevOffset) => ({ ...prevOffset }));
-    };
-
-    const handleMouseDown = (e) => {
-      setIsDragging(true);
-      setStartPos({ x: e.clientX, y: e.clientY });
-    };
-
-    const handleMouseMove = (e) => {
-      if (!isDragging) return;
-
-      const deltaX = e.clientX - startPos.x;
-      const deltaY = e.clientY - startPos.y;
-
-      setOffset((prevOffset) => {
-        const newOffsetX = prevOffset.x + deltaX;
-        const newOffsetY = prevOffset.y + deltaY;
-        return clampOffset(newOffsetX, newOffsetY);
-      });
-
-      setStartPos({ x: e.clientX, y: e.clientY });
-    };
-
-    const handleMouseUp = () => {
-      setIsDragging(false);
-    };
-
-    const handleWheel = (e) => {
-      e.preventDefault();
-
-      const zoomFactor = 0.003;
-      const newZoom = zoom + e.deltaY * -zoomFactor;
-
-      const clampedZoom = Math.max(1, Math.min(newZoom, 5));
-
-      if (clampedZoom === zoom) {
-        return;
+      // Ensure newScale is within the zoom limits
+      if (newScale < minZoom) {
+        newScale = minZoom;
+      }
+      if (newScale > maxZoom) {
+        newScale = maxZoom;
       }
 
-      const cursorX = e.clientX - canvasRef.current.getBoundingClientRect().left;
-      const cursorY = e.clientY - canvasRef.current.getBoundingClientRect().top;
+      stage.scale({ x: newScale, y: newScale });
 
-      const offsetX = ((offset.x - cursorX) / zoom) * clampedZoom + cursorX;
-      const offsetY = ((offset.y - cursorY) / zoom) * clampedZoom + cursorY;
+      // Adjust the position to zoom in where the mouse is pointing
+      const newPos = {
+        x: -(mousePointTo.x - stage.getPointerPosition().x / newScale) * newScale,
+        y: -(mousePointTo.y - stage.getPointerPosition().y / newScale) * newScale,
+      };
 
-      const clampedOffset = clampOffset(offsetX, offsetY);
+      stage.position(newPos);
+      stage.batchDraw();
+    });
 
-      setZoom(clampedZoom);
-      setOffset(clampedOffset);
-    };
+    // Define createTilemap inside useEffect
+    const createTilemap = (grassImage, whiteFlagImage) => {
+      const mapWidth = 20;
+      const mapHeight = 20;
+    
+      // Calculate offsets to center the map
+      const offsetX = stage.width() * 1.6;
+      const totalMapHeight = (mapWidth + mapHeight) * (tileHeight / 2); // Calculate total height of the map
+      const offsetY = (stage.height() - totalMapHeight) / 8; // Center vertically based on map's total height
+    
+      for (let i = mapWidth; i > 0; i--) {
+        for (let j = mapHeight; j > 0; j--) {
+          const x = (i - j) * (tileWidth / 2 ) + offsetX;
+          const y = (i + j) * (tileHeight / 2 ) + offsetY;
+    
+      
+          const tile = new Konva.Image({
+            x: x,
+            y: y,
+            image: grassImage,
+            width: tileWidth,
+            height: tileHeight * 2,
+           
+            offsetX: tileWidth / 2,
+            offsetY: tileHeight / 2,
+          });
+    
+          // Add grass tile
+          layer.add(tile);
 
-    const handleCanvasClick = async (e) => {
-      const rect = canvas.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-    
-      const tileSize = 50 * zoom;
-    
-      // Calculate the position relative to the center of the map
-      const isoX = (mouseX - offset.x) - tileSize;
-      const isoY = (mouseY - offset.y) - tileSize / 2;
-    
-      // Convert screen coordinates to isometric grid coordinates
-      const row = Math.floor((isoY / tileSize) + (isoX / (tileSize * 2)));
-      const col = Math.floor((isoY / tileSize) - (isoX / (tileSize * 2))) + mapSize;
-    
-      // Make sure row and col are positive (since you want them to start at 1)
-      const correctedRow = row + 1;
-      const correctedCol = col + 1;
-    
-      setTileCoordinates({ row: correctedRow, col: correctedCol });
-    
-      // Fetch occupancy status and update state
-      const occupancy = await fetchTileOccupancy(correctedRow, correctedCol);
-      setTileOccupancy(occupancy);
-    
-      if (occupancy === false) {
-        // If the tile is unoccupied, show the warning box
-        setSelectedTile({ row: correctedRow, col: correctedCol });
-        setShowWarningBox(true);
-      } else {
-        setShowWarningBox(false); // Hide the warning box if the tile is occupied
+
+          
+
+      
+
+          // Add event listener for right-click (mouse button 2)
+          tile.on('contextmenu', (e) => {
+            e.evt.preventDefault(); // Prevent the default context menu from appearing
+            setTileInfo({ x: i, y: j}); // Set the clicked tile's coordinates (starting from 1x1)
+          });
+        }
       }
-    };
     
-    
+      layer.batchDraw();
 
-    window.addEventListener('resize', handleResize);
-    canvas.addEventListener('mousedown', handleMouseDown);
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-    canvas.addEventListener('wheel', handleWheel);
-    canvas.addEventListener('click', handleCanvasClick);
 
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      canvas.removeEventListener('mousedown', handleMouseDown);
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-      canvas.removeEventListener('wheel', handleWheel);
-      canvas.removeEventListener('click', handleCanvasClick);
-    };
-  }, [isDragging, startPos, offset, zoom, clampOffset, fetchTileOccupancy, mapSize]);
 
-  useEffect(() => {
-    const navCanvas = navCanvasRef.current;
 
-    const handleNavClick = (e) => {
-      const rect = navCanvas.getBoundingClientRect();
-      const scaleFactor = navCanvasWidth / (mapSize * scaleFactorValue);
+      const flagX = (4 - 4) * (tileWidth / 2) + offsetX;
+      const flagY = (4 + 4) * (tileHeight / 2) + offsetY;
 
-      const clickedX = (e.clientX - rect.left) / scaleFactor;
-      const clickedY = (e.clientY - rect.top) / scaleFactor;
-
-      const newOffsetX = -clickedX;
-      const newOffsetY = -clickedY;
-
-      const clampedOffset = clampOffset(newOffsetX * zoom, newOffsetY * zoom);
-
-      setOffset(clampedOffset);
-    };
-
-    const handleNavMouseDown = (e) => {
-      const rect = navCanvasRef.current.getBoundingClientRect();
-      const scaleFactor = navCanvasWidth / (mapSize * scaleFactorValue);
-
-      const clickedX = (e.clientX - rect.left) / scaleFactor;
-      const clickedY = (e.clientY - rect.top) / scaleFactor;
-
-      setMarkerPosition({
-        x: clickedX,
-        y: clickedY,
+      const flag = new Konva.Image({
+        x: flagX,
+        y: flagY,
+        image: whiteFlagImage,
+        width: tileWidth,
+        height: tileHeight * 2,
+        offsetX: tileWidth / 2,
+        offsetY: tileHeight / 2,
       });
 
-      setIsDragging(true);
+      // Add flag to the flag layer
+      flagLayer.add(flag);
+      flagLayer.batchDraw();
+
+
+
+    };
+    
+    // Load the grass and white flag images
+    const grassImage = new Image();
+    grassImage.src = grassImageSrc;
+    const whiteFlagImage = new Image();
+    whiteFlagImage.src = whiteFlagImageSrc;
+    const nowayImage = new Image();
+    nowayImage.src = nowaysrc;
+
+    grassImage.onload = () => {
+      whiteFlagImage.onload = () => {
+        createTilemap(grassImage, whiteFlagImage);
+      };
     };
 
-    const handleNavMouseMove = (e) => {
-      if (!isDragging) return;
-
-      const rect = navCanvasRef.current.getBoundingClientRect();
-      const scaleFactor = navCanvasWidth / (mapSize * scaleFactorValue);
-
-      const mouseX = (e.clientX - rect.left) / scaleFactor;
-      const mouseY = (e.clientY - rect.top) / scaleFactor;
-
-      setMarkerPosition({
-        x: mouseX,
-        y: mouseY,
-      });
-
-      // Update the isometric map position based on the marker position
-      const newOffsetX = -mouseX;
-      const newOffsetY = -mouseY;
-
-      const clampedOffset = clampOffset(newOffsetX * zoom, newOffsetY * zoom);
-
-      setOffset(clampedOffset);
-    };
-
-    const handleNavMouseUp = () => {
-      setIsDragging(false);
-    };
-
-    navCanvas.addEventListener('mousedown', handleNavMouseDown);
-    navCanvas.addEventListener('mousemove', handleNavMouseMove);
-    navCanvas.addEventListener('mouseup', handleNavMouseUp);
-    navCanvas.addEventListener('click', handleNavClick);
-
+    // Cleanup on unmount
     return () => {
-      navCanvas.removeEventListener('mousedown', handleNavMouseDown);
-      navCanvas.removeEventListener('mousemove', handleNavMouseMove);
-      navCanvas.removeEventListener('mouseup', handleNavMouseUp);
-      navCanvas.removeEventListener('click', handleNavClick);
+      stage.destroy();
     };
-  }, [isDragging, markerPosition, offset, zoom, mapSize, navCanvasWidth, scaleFactorValue, clampOffset]);
+  }, []); // Empty dependency array
 
   return (
-    <>
-      <canvas ref={canvasRef} width={window.innerWidth} height={window.innerHeight} />
-      <canvas
-        ref={navCanvasRef}
-        width={navCanvasWidth}
-        height={navCanvasHeight}
-        style={{ position: 'absolute', bottom: '10px', left: '10px', border: '1px solid black' }}
-      />
-      <div style={{ position: 'absolute', top: '10px', left: '10px', color: 'white', backgroundColor: 'rgba(0, 0, 0, 0.5)', padding: '10px', borderRadius: '5px' }}>
-        {tileCoordinates.row !== null && tileCoordinates.col !== null && (
-          <>
-            <div>Tile Coordinates: Row {tileCoordinates.row}, Col {tileCoordinates.col}</div>
-            {tileOccupancy !== null && (
-              <div>Tile Status: {tileOccupancy ? "Occupied" : "Unoccupied"}</div>
-            )}
-            {showWarningBox && (
-              <>
-                <p>Do you want to occupy this tile?</p>
-                <button onClick={handleOccupyTile}>Occupy</button>
-                <button onClick={handleCancelOccupy} style={{ marginLeft: '10px' }}>Cancel</button>
-              </>
-            )}
-          </>
-        )}
-      </div>
-    </>
+    <div>
+      <div
+        id="container"
+        style={{
+          width: '100%',
+          height: '100%',
+          background: `
+            radial-gradient(circle at 98% 1%, rgba(255, 223, 186, 0.8), rgba(255, 184, 108, 0.5), rgba(255, 184, 108, 0) 20%), /* Sun glow effect at the top right */
+            radial-gradient(circle at 50% 100%, rgba(255,255,255,0.8), rgba(240,249,255,0) 70%), /* Light glow near horizon */
+            radial-gradient(circle at 50% 110%, #f8f9fa, transparent 50%), /* Soft mist-like effect */
+            linear-gradient(to bottom, #2a3a54 0%, #2a5298 30%, #4a89d8 60%, #99c9f5 80%, #e0f0ff 100%) /* Sky transition with horizon glow */
+          `,
+          backgroundAttachment: 'fixed',
+          backgroundSize: 'cover',
+        }}
+      ></div>
+
+      {tileInfo && (
+        <div style={{ position: 'absolute', top: 10, left: 10, background: 'rgba(255,255,255,0.8)', padding: '10px', borderRadius: '5px' }}>
+          <strong>Tile Info:</strong><br />
+          X: {tileInfo.x}<br />
+          Y: {tileInfo.y}
+        </div>
+      )}
+    </div>
   );
 };
 
